@@ -185,6 +185,8 @@ class RoomManager {
         for (let i = 0; i < Math.min(config.jester || 0, playerCount - roles.length); i++) roles.push(ROLES.JESTER);
         for (let i = 0; i < Math.min(config.eskort || 0, playerCount - roles.length); i++) roles.push(ROLES.ESKORT);
         for (let i = 0; i < Math.min(config.mezar_hirsizi || 0, playerCount - roles.length); i++) roles.push(ROLES.MEZAR_HIRSIZI);
+        for (let i = 0; i < Math.min(config.medyum || 0, playerCount - roles.length); i++) roles.push(ROLES.MEDYUM);
+        for (let i = 0; i < Math.min(config.intikamci || 0, playerCount - roles.length); i++) roles.push(ROLES.INTIKAMCI);
 
         // Geri kalanı köylü
         while (roles.length < playerCount) {

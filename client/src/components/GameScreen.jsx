@@ -9,7 +9,9 @@ const ROLE_INFO = {
     gozcu: { name: 'Gözcü', emoji: '🔮', color: 'text-purple-400', bgColor: 'from-purple-700 to-purple-900' },
     jester: { name: 'Jester', emoji: '🃏', color: 'text-yellow-400', bgColor: 'from-yellow-700 to-yellow-900' },
     eskort: { name: 'Eskort', emoji: '💃', color: 'text-pink-400', bgColor: 'from-pink-700 to-pink-900' },
-    mezar_hirsizi: { name: 'Mezar Hırsızı', emoji: '⚰️', color: 'text-gray-400', bgColor: 'from-gray-700 to-gray-900' }
+    mezar_hirsizi: { name: 'Mezar Hırsızı', emoji: '⚰️', color: 'text-gray-400', bgColor: 'from-gray-700 to-gray-900' },
+    medyum: { name: 'Medyum', emoji: '🔯', color: 'text-indigo-400', bgColor: 'from-indigo-700 to-indigo-900' },
+    intikamci: { name: 'İntikamci', emoji: '⚔️', color: 'text-orange-400', bgColor: 'from-orange-700 to-orange-900' }
 };
 
 // Faz bilgileri
@@ -82,10 +84,15 @@ function GameScreen({
             targetId = eskortStayHome ? null : selectedTarget;
             if (!eskortStayHome && !selectedTarget) return;
         } else if (myRole === 'mezar_hirsizi') {
-            // Mezar Hırsızı sadece ilk gece hedef seçer
             if (gameState?.round !== 1) return;
             if (!selectedTarget) return;
             actionType = 'mezar_hirsizi_target';
+        } else if (myRole === 'medyum') {
+            if (!selectedTarget) return;
+            actionType = 'medyum_revive';
+        } else if (myRole === 'intikamci') {
+            if (!selectedTarget) return;
+            actionType = 'intikamci_mark';
         } else {
             return;
         }
@@ -114,6 +121,8 @@ function GameScreen({
             if (myRole === 'koylu' || myRole === 'jester') return false;
             // Mezar Hırsızı sadece ilk gece seçebilir
             if (myRole === 'mezar_hirsizi' && gameState?.round !== 1) return false;
+            // Medyum sadece ölü oyuncuları seçebilir (bu canSelect değil, ayrı UI)
+            if (myRole === 'medyum') return false; // Ölüler için ayrı liste gösterilecek
             // Vampir başka vampiri öldüremez
             if (myRole === 'vampir' && teammates.includes(player.name)) return false;
         }
@@ -250,6 +259,8 @@ function GameScreen({
                                     {myRole === 'jester' && 'Amacın köy halkını seni asmaları için kandırmak! Asılırsan kazanırsın!'}
                                     {myRole === 'eskort' && 'Her gece birini ziyaret edebilir veya evde kalabilirsin. Dikkat: Ziyaret ettiğin kişi saldırıya uğrarsa sen de ölürsün!'}
                                     {myRole === 'mezar_hirsizi' && 'İlk gece bir hedef seç. Hedefin öldüğünde onun rolüne dönüşürsün!'}
+                                    {myRole === 'medyum' && 'Oyun boyunca SADECE 1 KERE ölmüş bir oyuncuyu canlandırabilirsin!'}
+                                    {myRole === 'intikamci' && 'Her gece birini işaretle. Ölürsen, işaretlediğin kişi de seninle birlikte ölür!'}
                                 </p>
                                 {teammates.length > 0 && (
                                     <div className="mt-4 p-3 bg-black/30 rounded-lg">
@@ -280,6 +291,8 @@ function GameScreen({
                                         {myRole === 'eskort' && '💃 Ziyaret etmek istediğin kişiyi seç veya evde kal'}
                                         {myRole === 'mezar_hirsizi' && gameState?.round === 1 && '⚰️ Hedefini seç! Öldüğünde onun rolüne dönüşeceksin.'}
                                         {myRole === 'mezar_hirsizi' && gameState?.round !== 1 && '⚰️ Hedefinin ölmesini bekle...'}
+                                        {myRole === 'medyum' && '🔯 Canlandırmak istediğin ÖLÜ oyuncuyu aşağıdan seç'}
+                                        {myRole === 'intikamci' && '⚔️ İşaretlemek istediğin kişiyi seç. Ölürsen o da ölecek!'}
                                         {myRole === 'jester' && '🃏 Gece boyunca bekle... Gündüz seni asmaları için kandır!'}
                                         {myRole === 'koylu' && '😴 Uyu ve sabahı bekle...'}
                                     </div>
@@ -313,6 +326,36 @@ function GameScreen({
                                     >
                                         🏠 Evde Kal {eskortStayHome && '✓'}
                                     </button>
+                                </div>
+                            )}
+
+                            {/* Medyum - Ölü oyuncu listesi */}
+                            {gameState?.phase === 'night' && myRole === 'medyum' && isAlive && (
+                                <div className="mb-6">
+                                    <h3 className="text-center text-indigo-300 font-medium mb-3">🔯 Canlandırılacak Ölü Oyuncular</h3>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        {(gameState?.deadPlayers || []).map(deadPlayer => (
+                                            <button
+                                                key={deadPlayer.id}
+                                                onClick={() => !hasActed && setSelectedTarget(deadPlayer.id)}
+                                                disabled={hasActed}
+                                                className={`p-4 rounded-xl transition-all duration-200 text-center
+                                                    bg-gradient-to-br from-indigo-900 to-indigo-950 border border-indigo-700
+                                                    ${selectedTarget === deadPlayer.id ? 'ring-2 ring-indigo-400 ring-offset-2 ring-offset-night-900 scale-105' : ''}
+                                                    ${!hasActed ? 'hover:scale-105 hover:border-indigo-500 cursor-pointer' : 'cursor-default opacity-50'}`}
+                                            >
+                                                <div className="w-12 h-12 mx-auto rounded-full bg-gradient-to-br from-indigo-600 to-indigo-800 
+                                                    flex items-center justify-center text-xl mb-2">
+                                                    💀
+                                                </div>
+                                                <p className="font-medium text-white truncate">{deadPlayer.name}</p>
+                                                <p className="text-xs text-indigo-400">Ölü</p>
+                                            </button>
+                                        ))}
+                                        {(!gameState?.deadPlayers || gameState.deadPlayers.length === 0) && (
+                                            <p className="col-span-full text-center text-gray-500">Henüz ölen oyuncu yok.</p>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
@@ -357,7 +400,7 @@ function GameScreen({
                             {/* Aksiyon butonu */}
                             {isAlive && (gameState?.phase === 'night' || gameState?.phase === 'voting') && (
                                 <div className="text-center">
-                                    {gameState?.phase === 'night' && myRole !== 'koylu' && myRole !== 'jester' && !(myRole === 'mezar_hirsizi' && gameState?.round !== 1) && (
+                                    {gameState?.phase === 'night' && myRole !== 'koylu' && myRole !== 'jester' && myRole !== 'medyum' && !(myRole === 'mezar_hirsizi' && gameState?.round !== 1) && (
                                         <button
                                             onClick={handleNightAction}
                                             disabled={(!selectedTarget && !eskortStayHome) || hasActed}
@@ -368,7 +411,19 @@ function GameScreen({
                                                     myRole === 'doktor' ? '💉 Koru' :
                                                         myRole === 'gozcu' ? '🔮 Sorgula' :
                                                             myRole === 'eskort' ? (eskortStayHome ? '🏠 Evde Kal' : '💃 Ziyaret Et') :
-                                                                myRole === 'mezar_hirsizi' ? '⚰️ Hedefi Kilitle' : 'Gönder'}
+                                                                myRole === 'mezar_hirsizi' ? '⚰️ Hedefi Kilitle' :
+                                                                    myRole === 'intikamci' ? '⚔️ İşaretle' : 'Gönder'}
+                                        </button>
+                                    )}
+
+                                    {/* Medyum için ayrı buton */}
+                                    {gameState?.phase === 'night' && myRole === 'medyum' && (
+                                        <button
+                                            onClick={handleNightAction}
+                                            disabled={!selectedTarget || hasActed}
+                                            className="btn-primary px-8 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600"
+                                        >
+                                            {hasActed ? '✅ Canlandırma Gönderildi' : '🔯 Canlandır'}
                                         </button>
                                     )}
 

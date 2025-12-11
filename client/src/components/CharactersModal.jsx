@@ -71,6 +71,26 @@ const ALL_ROLES = [
         bgColor: 'from-gray-700 to-gray-900',
         borderColor: 'border-gray-500',
         description: 'İLK GECE bir hedef seç (değiştiremezsin!). Hedefin öldüğünde onun rolüne dönüşürsün. Vampir bile olabilirsin!'
+    },
+    {
+        id: 'medyum',
+        name: 'Medyum',
+        emoji: '🔯',
+        team: 'Köylü',
+        teamColor: 'text-indigo-400',
+        bgColor: 'from-indigo-800 to-indigo-900',
+        borderColor: 'border-indigo-600',
+        description: 'Oyun boyunca SADECE 1 KERE ölmüş bir oyuncuyu canlandırabilirsin. Büyük güç, büyük sorumluluk!'
+    },
+    {
+        id: 'intikamci',
+        name: 'İntikamcı',
+        emoji: '⚔️',
+        team: 'Köylü',
+        teamColor: 'text-orange-400',
+        bgColor: 'from-orange-800 to-orange-900',
+        borderColor: 'border-orange-600',
+        description: 'Her gece birini işaretle. Eğer o gece (veya oylama sonucu) ölürsen, işaretlediğin kişi de seninle birlikte ölür!'
     }
 ];
 

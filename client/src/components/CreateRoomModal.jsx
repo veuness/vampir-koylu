@@ -12,6 +12,8 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
             jester: 0,
             eskort: 0,
             mezar_hirsizi: 0,
+            medyum: 0,
+            intikamci: 0,
             koylu: 4
         },
         timers: {
@@ -234,6 +236,40 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
                                     className="input-dark text-center text-sm"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">Rol çalar!</p>
+                            </div>
+
+                            {/* Medyum */}
+                            <div className="bg-night-800 p-3 rounded-lg border border-indigo-600/30">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xl">🔯</span>
+                                    <span className="text-indigo-400 font-medium text-sm">Medyum</span>
+                                </div>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="1"
+                                    value={config.roles.medyum || 0}
+                                    onChange={(e) => updateRole('medyum', e.target.value)}
+                                    className="input-dark text-center text-sm"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Canlandırır!</p>
+                            </div>
+
+                            {/* İntikamci */}
+                            <div className="bg-night-800 p-3 rounded-lg border border-orange-600/30">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xl">⚔️</span>
+                                    <span className="text-orange-400 font-medium text-sm">İntikamci</span>
+                                </div>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="1"
+                                    value={config.roles.intikamci || 0}
+                                    onChange={(e) => updateRole('intikamci', e.target.value)}
+                                    className="input-dark text-center text-sm"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Ölünce intikam!</p>
                             </div>
 
                             {/* Köylü */}

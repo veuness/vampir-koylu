@@ -7,31 +7,27 @@ class GameManager {
         this.timers = new Map();
     }
 
-    // Socket.io instance'ı ayarla
     setIO(io) {
         this.io = io;
     }
 
-    // Oyunu başlat
     startGame(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return { success: false, error: 'Oda bulunamadı!' };
 
-        // Rolleri dağıt
         const roleResult = roomManager.assignRoles(roomCode);
         if (!roleResult.success) return roleResult;
 
-        // Mezar Hırsızı hedef takibi
-        room.graveRobberTargets = new Map(); // mezarHırsızıId -> hedefId
+        // Özel rol takipleri
+        room.graveRobberTargets = new Map();
+        room.medyumUsed = new Map(); // medyumId -> true (yeteneğini kullandı mı)
+        room.intikamciTarget = new Map(); // intikamciId -> targetId (bu gece işaretlediği)
 
-        // Oyunu rol gösterimi fazına geçir
         room.phase = PHASES.ROLE_REVEAL;
         room.round = 1;
 
-        // Oyunculara rollerini bildir
         this.broadcastRoles(roomCode);
 
-        // Rol gösterimi sonrası geceye geç
         this.startTimer(roomCode, DEFAULT_TIMERS.ROLE_REVEAL, () => {
             this.startNightPhase(roomCode);
         });
@@ -39,16 +35,13 @@ class GameManager {
         return { success: true };
     }
 
-    // Rolleri oyunculara bildir
     broadcastRoles(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
 
-        // Her oyuncuya kendi rolünü gönder
         for (const [playerId, player] of room.players) {
             const roleInfo = ROLE_DESCRIPTIONS[player.role];
 
-            // Vampirler diğer vampirleri görebilir
             let teammates = [];
             if (player.role === ROLES.VAMPIR) {
                 for (const [otherId, otherPlayer] of room.players) {
@@ -65,11 +58,9 @@ class GameManager {
             });
         }
 
-        // Genel oyun durumunu güncelle
         this.broadcastGameState(roomCode);
     }
 
-    // Gece fazını başlat
     startNightPhase(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
@@ -81,18 +72,18 @@ class GameManager {
             gozcuResults: new Map(),
             vampirVotes: new Map(),
             eskortVisit: new Map(),
-            mezarHirsizi: new Map() // mezarHirsizId -> targetId (sadece ilk gece)
+            mezarHirsizi: new Map(),
+            medyumRevive: null, // medyumId ve targetId
+            intikamciMark: new Map() // intikamciId -> targetId
         };
 
         this.broadcastGameState(roomCode);
 
-        // Gece zamanlayıcısı
         this.startTimer(roomCode, DEFAULT_TIMERS.NIGHT, () => {
             this.processNightActions(roomCode);
         });
     }
 
-    // Gece aksiyonunu işle
     processNightAction(roomCode, playerId, targetId, actionType) {
         const room = roomManager.getRoom(roomCode);
         if (!room || room.phase !== PHASES.NIGHT) return { success: false };
@@ -104,7 +95,6 @@ class GameManager {
         if (actionType === 'vampir_kill' && player.role === ROLES.VAMPIR) {
             room.nightActions.vampirVotes.set(playerId, targetId);
 
-            // Tüm vampirler oy verdiyse hedefi belirle
             const aliveVampires = Array.from(room.players.values())
                 .filter(p => p.role === ROLES.VAMPIR && p.isAlive);
 
@@ -138,7 +128,6 @@ class GameManager {
                     isVampir
                 });
 
-                // Gözcüye sonucu bildir
                 this.io.to(playerId).emit('gozcu_result', {
                     targetName: targetPlayer.name,
                     isVampir
@@ -155,7 +144,6 @@ class GameManager {
 
         // Mezar Hırsızı hedef seçimi (sadece ilk gece)
         if (actionType === 'mezar_hirsizi_target' && player.role === ROLES.MEZAR_HIRSIZI) {
-            // Sadece ilk gece ve daha önce seçim yapmadıysa
             if (room.round === 1 && !room.graveRobberTargets.has(playerId)) {
                 room.graveRobberTargets.set(playerId, targetId);
                 const targetPlayer = room.players.get(targetId);
@@ -170,6 +158,34 @@ class GameManager {
             return { success: false, error: 'Sadece ilk gece hedef seçebilirsin!' };
         }
 
+        // Medyum canlandırma (tek kullanımlık)
+        if (actionType === 'medyum_revive' && player.role === ROLES.MEDYUM) {
+            // Daha önce kullandıysa izin verme
+            if (room.medyumUsed.get(playerId)) {
+                return { success: false, error: 'Canlandırma yeteneğini zaten kullandın!' };
+            }
+
+            const targetPlayer = room.players.get(targetId);
+            if (!targetPlayer || targetPlayer.isAlive) {
+                return { success: false, error: 'Sadece ölü oyuncuları canlandırabilirsin!' };
+            }
+
+            room.nightActions.medyumRevive = { medyumId: playerId, targetId };
+            return { success: true };
+        }
+
+        // İntikamcı işaretleme
+        if (actionType === 'intikamci_mark' && player.role === ROLES.INTIKAMCI) {
+            const targetPlayer = room.players.get(targetId);
+            if (!targetPlayer || !targetPlayer.isAlive) {
+                return { success: false, error: 'Sadece hayattaki oyuncuları işaretleyebilirsin!' };
+            }
+
+            room.nightActions.intikamciMark.set(playerId, targetId);
+            room.intikamciTarget.set(playerId, targetId);
+            return { success: true };
+        }
+
         return { success: false };
     }
 
@@ -181,7 +197,6 @@ class GameManager {
         const deadPlayer = room.players.get(deadPlayerId);
         if (!deadPlayer) return;
 
-        // Her mezar hırsızı için kontrol et
         for (const [graveRobberId, targetId] of room.graveRobberTargets) {
             if (targetId === deadPlayerId) {
                 const graveRobber = room.players.get(graveRobberId);
@@ -189,17 +204,14 @@ class GameManager {
                     const oldRole = deadPlayer.role;
                     const roleInfo = ROLE_DESCRIPTIONS[oldRole];
 
-                    // Rolü dönüştür
                     graveRobber.role = oldRole;
 
-                    // Dönüşümü bildir
                     this.io.to(graveRobberId).emit('grave_robber_transform', {
                         newRole: oldRole,
                         roleInfo: roleInfo,
                         message: `Hedefin ${deadPlayer.name} öldü! Artık sen yeni ${roleInfo?.name || oldRole} oldun!`
                     });
 
-                    // Eğer vampir olduysa, vampir takımıyla tanıştır
                     if (oldRole === ROLES.VAMPIR) {
                         const vampires = [];
                         for (const [id, p] of room.players) {
@@ -218,7 +230,39 @@ class GameManager {
         }
     }
 
-    // Gece aksiyonlarını sonuçlandır
+    // İntikamcı ölüm kontrolü - ölürse işaretlediğini de öldür
+    checkAvengerRevenge(roomCode, deadPlayerId, killedPlayers) {
+        const room = roomManager.getRoom(roomCode);
+        if (!room) return;
+
+        // Bu gece işaretleme var mı kontrol et
+        for (const [intikamciId, markedId] of room.intikamciTarget) {
+            if (intikamciId === deadPlayerId) {
+                // İntikamcı öldü, işaretlediği kişiyi de öldür
+                const markedPlayer = room.players.get(markedId);
+                if (markedPlayer && markedPlayer.isAlive) {
+                    markedPlayer.isAlive = false;
+                    room.deadPlayers.add(markedId);
+                    killedPlayers.push({
+                        id: markedPlayer.id,
+                        name: markedPlayer.name,
+                        reason: 'intikamci_gazabi'
+                    });
+
+                    // İşaretlenen için de Mezar Hırsızı kontrolü
+                    this.checkGraveRobberTransformation(roomCode, markedId);
+
+                    // Herkese bildir
+                    this.io.to(roomCode).emit('avenger_revenge', {
+                        avengerName: room.players.get(intikamciId)?.name,
+                        victimName: markedPlayer.name,
+                        message: `⚔️ ${room.players.get(intikamciId)?.name}'ın gazabı! ${markedPlayer.name} de öldü!`
+                    });
+                }
+            }
+        }
+    }
+
     processNightActions(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
@@ -227,6 +271,31 @@ class GameManager {
         const vampirTarget = room.nightActions.vampirTarget;
         const doktorTarget = room.nightActions.doktorTarget;
         const eskortVisits = room.nightActions.eskortVisit;
+
+        // Medyum canlandırma işlemi (ölüm işlemlerinden ÖNCE)
+        if (room.nightActions.medyumRevive) {
+            const { medyumId, targetId } = room.nightActions.medyumRevive;
+            const targetPlayer = room.players.get(targetId);
+            const medyum = room.players.get(medyumId);
+
+            if (targetPlayer && !targetPlayer.isAlive && medyum && medyum.isAlive) {
+                // Canlandır
+                targetPlayer.isAlive = true;
+                room.deadPlayers.delete(targetId);
+                room.medyumUsed.set(medyumId, true);
+
+                // Herkese bildir
+                this.io.to(roomCode).emit('player_revived', {
+                    revivedName: targetPlayer.name,
+                    message: `🔯 Bir mucize oldu! ${targetPlayer.name} hayata döndü!`
+                });
+
+                // Medyum'a özel bildirim
+                this.io.to(medyumId).emit('medyum_success', {
+                    message: `${targetPlayer.name} başarıyla canlandırıldı! Artık bu yeteneği tekrar kullanamazsın.`
+                });
+            }
+        }
 
         // Ana hedef işleme
         if (vampirTarget) {
@@ -240,6 +309,9 @@ class GameManager {
                     room.deadPlayers.add(vampirTarget);
                     killedPlayers.push({ id: target.id, name: target.name, reason: 'vampir' });
 
+                    // İntikamcı kontrolü - eğer ölen İntikamcı ise
+                    this.checkAvengerRevenge(roomCode, vampirTarget, killedPlayers);
+
                     // Mezar Hırsızı dönüşüm kontrolü
                     this.checkGraveRobberTransformation(roomCode, vampirTarget);
 
@@ -252,7 +324,8 @@ class GameManager {
                                 room.deadPlayers.add(eskortId);
                                 killedPlayers.push({ id: eskort.id, name: eskort.name, reason: 'eskort_visit' });
 
-                                // Eskort için de Mezar Hırsızı kontrolü
+                                // Eskort İntikamcı mı?
+                                this.checkAvengerRevenge(roomCode, eskortId, killedPlayers);
                                 this.checkGraveRobberTransformation(roomCode, eskortId);
                             }
                         }
@@ -273,7 +346,7 @@ class GameManager {
                         room.deadPlayers.add(eskortId);
                         killedPlayers.push({ id: eskort.id, name: eskort.name, reason: 'vampir' });
 
-                        // Mezar Hırsızı dönüşüm kontrolü
+                        this.checkAvengerRevenge(roomCode, eskortId, killedPlayers);
                         this.checkGraveRobberTransformation(roomCode, eskortId);
                     }
                 } else {
@@ -298,11 +371,9 @@ class GameManager {
             return;
         }
 
-        // Gündüz fazına geç
         this.startDayPhase(roomCode);
     }
 
-    // Gündüz fazını başlat
     startDayPhase(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
@@ -318,7 +389,6 @@ class GameManager {
         });
     }
 
-    // Oylama fazını başlat
     startVotingPhase(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
@@ -335,7 +405,6 @@ class GameManager {
         });
     }
 
-    // Oy ver
     vote(roomCode, voterId, targetId) {
         const room = roomManager.getRoom(roomCode);
         if (!room || room.phase !== PHASES.VOTING) return { success: false };
@@ -355,7 +424,6 @@ class GameManager {
         return { success: true };
     }
 
-    // Oyları işle
     processVotes(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
@@ -381,17 +449,14 @@ class GameManager {
         }
 
         let eliminatedPlayer = null;
-        let jesterWin = false;
 
         if (eliminated) {
             const player = room.players.get(eliminated);
             if (player) {
                 // JESTER KONTROLÜ
                 if (player.role === ROLES.JESTER) {
-                    jesterWin = true;
                     player.isAlive = false;
                     room.deadPlayers.add(eliminated);
-                    eliminatedPlayer = player;
 
                     this.io.to(roomCode).emit('vote_result', {
                         eliminated: {
@@ -413,7 +478,26 @@ class GameManager {
                 room.deadPlayers.add(eliminated);
                 eliminatedPlayer = player;
 
-                // Mezar Hırsızı dönüşüm kontrolü
+                // İntikamcı asıldıysa, işaretlediğini de öldür
+                if (player.role === ROLES.INTIKAMCI) {
+                    const markedId = room.intikamciTarget.get(eliminated);
+                    if (markedId) {
+                        const markedPlayer = room.players.get(markedId);
+                        if (markedPlayer && markedPlayer.isAlive) {
+                            markedPlayer.isAlive = false;
+                            room.deadPlayers.add(markedId);
+
+                            this.io.to(roomCode).emit('avenger_revenge', {
+                                avengerName: player.name,
+                                victimName: markedPlayer.name,
+                                message: `⚔️ ${player.name}'ın gazabı! ${markedPlayer.name} de öldü!`
+                            });
+
+                            this.checkGraveRobberTransformation(roomCode, markedId);
+                        }
+                    }
+                }
+
                 this.checkGraveRobberTransformation(roomCode, eliminated);
             }
         }
@@ -442,7 +526,6 @@ class GameManager {
         }, 3000);
     }
 
-    // Kazanan kontrolü
     checkWinCondition(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return null;
@@ -464,7 +547,6 @@ class GameManager {
         return null;
     }
 
-    // Oyunu bitir
     endGame(roomCode, winner) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
@@ -486,7 +568,6 @@ class GameManager {
         });
     }
 
-    // Oyun durumunu yayınla
     broadcastGameState(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
@@ -498,15 +579,20 @@ class GameManager {
             isHost: p.isHost
         }));
 
+        // Ölü oyuncuları da gönder (Medyum için)
+        const deadPlayers = Array.from(room.players.values())
+            .filter(p => !p.isAlive)
+            .map(p => ({ id: p.id, name: p.name }));
+
         this.io.to(roomCode).emit('game_state', {
             phase: room.phase,
             round: room.round,
             players,
+            deadPlayers,
             alivePlayers: players.filter(p => p.isAlive).length
         });
     }
 
-    // Oy durumunu yayınla
     broadcastVoteStatus(roomCode) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
@@ -530,7 +616,6 @@ class GameManager {
         });
     }
 
-    // Zamanlayıcı başlat
     startTimer(roomCode, seconds, callback) {
         this.stopTimer(roomCode);
 
@@ -558,7 +643,6 @@ class GameManager {
         });
     }
 
-    // Zamanlayıcıyı durdur
     stopTimer(roomCode) {
         const timer = this.timers.get(roomCode);
         if (timer) {
@@ -567,7 +651,6 @@ class GameManager {
         }
     }
 
-    // Chat mesajı gönder
     sendChatMessage(roomCode, playerId, message) {
         const room = roomManager.getRoom(roomCode);
         if (!room) return { success: false };
