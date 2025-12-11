@@ -9,6 +9,8 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
             vampir: 2,
             doktor: 1,
             gozcu: 1,
+            jester: 0,
+            eskort: 0,
             koylu: 4
         },
         timers: {
@@ -20,7 +22,7 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
     const [error, setError] = useState('');
 
     // Toplam rol sayısı
-    const totalRoles = config.roles.vampir + config.roles.doktor + config.roles.gozcu + config.roles.koylu;
+    const totalRoles = Object.values(config.roles).reduce((a, b) => a + b, 0);
 
     // Validasyon
     const validate = () => {
@@ -133,12 +135,12 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
                             </span>
                         </label>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                             {/* Vampir */}
                             <div className="bg-night-800 p-3 rounded-lg">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-xl">🧛</span>
-                                    <span className="text-vampire-400 font-medium">Vampir</span>
+                                    <span className="text-vampire-400 font-medium text-sm">Vampir</span>
                                 </div>
                                 <input
                                     type="number"
@@ -146,7 +148,7 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
                                     max="5"
                                     value={config.roles.vampir}
                                     onChange={(e) => updateRole('vampir', e.target.value)}
-                                    className="input-dark text-center"
+                                    className="input-dark text-center text-sm"
                                 />
                             </div>
 
@@ -154,7 +156,7 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
                             <div className="bg-night-800 p-3 rounded-lg">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-xl">👨‍⚕️</span>
-                                    <span className="text-emerald-400 font-medium">Doktor</span>
+                                    <span className="text-cyan-400 font-medium text-sm">Doktor</span>
                                 </div>
                                 <input
                                     type="number"
@@ -162,7 +164,7 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
                                     max="3"
                                     value={config.roles.doktor}
                                     onChange={(e) => updateRole('doktor', e.target.value)}
-                                    className="input-dark text-center"
+                                    className="input-dark text-center text-sm"
                                 />
                             </div>
 
@@ -170,7 +172,7 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
                             <div className="bg-night-800 p-3 rounded-lg">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-xl">🔮</span>
-                                    <span className="text-purple-400 font-medium">Gözcü</span>
+                                    <span className="text-purple-400 font-medium text-sm">Gözcü</span>
                                 </div>
                                 <input
                                     type="number"
@@ -178,15 +180,49 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
                                     max="2"
                                     value={config.roles.gozcu}
                                     onChange={(e) => updateRole('gozcu', e.target.value)}
-                                    className="input-dark text-center"
+                                    className="input-dark text-center text-sm"
                                 />
+                            </div>
+
+                            {/* Jester */}
+                            <div className="bg-night-800 p-3 rounded-lg border border-yellow-600/30">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xl">🃏</span>
+                                    <span className="text-yellow-400 font-medium text-sm">Jester</span>
+                                </div>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="1"
+                                    value={config.roles.jester}
+                                    onChange={(e) => updateRole('jester', e.target.value)}
+                                    className="input-dark text-center text-sm"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Asılırsa kazanır!</p>
+                            </div>
+
+                            {/* Eskort */}
+                            <div className="bg-night-800 p-3 rounded-lg border border-pink-600/30">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xl">💃</span>
+                                    <span className="text-pink-400 font-medium text-sm">Eskort</span>
+                                </div>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="2"
+                                    value={config.roles.eskort}
+                                    onChange={(e) => updateRole('eskort', e.target.value)}
+                                    className="input-dark text-center text-sm"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Ziyaret edebilir</p>
                             </div>
 
                             {/* Köylü */}
                             <div className="bg-night-800 p-3 rounded-lg">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-xl">👨‍🌾</span>
-                                    <span className="text-amber-400 font-medium">Köylü</span>
+                                    <span className="text-amber-400 font-medium text-sm">Köylü</span>
                                 </div>
                                 <input
                                     type="number"
@@ -194,7 +230,7 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
                                     max="10"
                                     value={config.roles.koylu}
                                     onChange={(e) => updateRole('koylu', e.target.value)}
-                                    className="input-dark text-center"
+                                    className="input-dark text-center text-sm"
                                 />
                             </div>
                         </div>

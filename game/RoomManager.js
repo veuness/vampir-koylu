@@ -177,14 +177,13 @@ class RoomManager {
         // Oda config'inden rol dağılımını al
         const config = room.config.roles;
 
-        // Toplam rol sayısını kontrol et
-        const totalConfigRoles = config.vampir + config.doktor + config.gozcu + config.koylu;
-
         // Rolleri oluştur
         const roles = [];
-        for (let i = 0; i < Math.min(config.vampir, playerCount); i++) roles.push(ROLES.VAMPIR);
-        for (let i = 0; i < Math.min(config.doktor, playerCount - roles.length); i++) roles.push(ROLES.DOKTOR);
-        for (let i = 0; i < Math.min(config.gozcu, playerCount - roles.length); i++) roles.push(ROLES.GOZCU);
+        for (let i = 0; i < Math.min(config.vampir || 0, playerCount); i++) roles.push(ROLES.VAMPIR);
+        for (let i = 0; i < Math.min(config.doktor || 0, playerCount - roles.length); i++) roles.push(ROLES.DOKTOR);
+        for (let i = 0; i < Math.min(config.gozcu || 0, playerCount - roles.length); i++) roles.push(ROLES.GOZCU);
+        for (let i = 0; i < Math.min(config.jester || 0, playerCount - roles.length); i++) roles.push(ROLES.JESTER);
+        for (let i = 0; i < Math.min(config.eskort || 0, playerCount - roles.length); i++) roles.push(ROLES.ESKORT);
 
         // Geri kalanı köylü
         while (roles.length < playerCount) {

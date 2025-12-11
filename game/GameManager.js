@@ -76,7 +76,8 @@ class GameManager {
             vampirTarget: null,
             doktorTarget: null,
             gozcuResults: new Map(),
-            vampirVotes: new Map()
+            vampirVotes: new Map(),
+            eskortVisit: new Map() // eskortId -> targetId (null = evde kal)
         };
 
         this.broadcastGameState(roomCode);
@@ -142,6 +143,12 @@ class GameManager {
             return { success: true };
         }
 
+        // Eskort ziyaret (targetId = null ise evde kal)
+        if (actionType === 'eskort_visit' && player.role === ROLES.ESKORT) {
+            room.nightActions.eskortVisit.set(playerId, targetId); // null = evde kal
+            return { success: true };
+        }
+
         return { success: false };
     }
 
@@ -150,27 +157,73 @@ class GameManager {
         const room = roomManager.getRoom(roomCode);
         if (!room) return;
 
-        let killedPlayer = null;
+        const killedPlayers = [];
         const vampirTarget = room.nightActions.vampirTarget;
         const doktorTarget = room.nightActions.doktorTarget;
 
-        // Eğer vampir hedefi doktor tarafından korunmadıysa öldür
-        if (vampirTarget && vampirTarget !== doktorTarget) {
+        // Eskort ziyaretlerini kontrol et
+        const eskortVisits = room.nightActions.eskortVisit;
+
+        // Ana hedef işleme
+        if (vampirTarget) {
             const target = room.players.get(vampirTarget);
+
             if (target && target.isAlive) {
-                target.isAlive = false;
-                room.deadPlayers.add(vampirTarget);
-                killedPlayer = target;
+                // Doktor tarafından korunuyor mu?
+                const isProtected = vampirTarget === doktorTarget;
+
+                if (!isProtected) {
+                    // Hedef öldü
+                    target.isAlive = false;
+                    room.deadPlayers.add(vampirTarget);
+                    killedPlayers.push({ id: target.id, name: target.name, reason: 'vampir' });
+
+                    // Eskort kontrolü: Birisi bu hedefi ziyaret ediyor mu?
+                    for (const [eskortId, visitTarget] of eskortVisits) {
+                        if (visitTarget === vampirTarget) {
+                            // Senaryo C: Eskort ziyaret ettiği kişi saldırıya uğradı
+                            const eskort = room.players.get(eskortId);
+                            if (eskort && eskort.isAlive) {
+                                eskort.isAlive = false;
+                                room.deadPlayers.add(eskortId);
+                                killedPlayers.push({ id: eskort.id, name: eskort.name, reason: 'eskort_visit' });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Eskort evde mi kontrolü (Senaryo A ve B)
+        for (const [eskortId, visitTarget] of eskortVisits) {
+            const eskort = room.players.get(eskortId);
+            if (!eskort || !eskort.isAlive) continue;
+
+            // Vampirler eskort'un evine mi saldırdı?
+            if (vampirTarget === eskortId) {
+                if (visitTarget === null) {
+                    // Senaryo A: Eskort evde kaldı ve saldırıya uğradı -> ÖLÜR
+                    // (Bu zaten yukarıda işlendi, doktor koruması yoksa)
+                    // Eğer doktor korumadıysa ve hala hayattaysa öldür
+                    if (eskort.isAlive && doktorTarget !== eskortId) {
+                        eskort.isAlive = false;
+                        room.deadPlayers.add(eskortId);
+                        killedPlayers.push({ id: eskort.id, name: eskort.name, reason: 'vampir' });
+                    }
+                } else {
+                    // Senaryo B: Eskort dışarıdaydı, evi boştu -> KURTULUR
+                    this.io.to(eskortId).emit('eskort_escaped', {
+                        message: 'Vampirler evine saldırdı ama sen dışarıdaydın! Kurtuldun!'
+                    });
+                }
             }
         }
 
         // Gece sonucunu bildir
         this.io.to(roomCode).emit('night_result', {
-            killed: killedPlayer ? {
-                id: killedPlayer.id,
-                name: killedPlayer.name
-            } : null,
-            saved: vampirTarget === doktorTarget && vampirTarget ? true : false
+            killed: killedPlayers.length > 0 ? killedPlayers : null,
+            saved: vampirTarget === doktorTarget && vampirTarget ? true : false,
+            multipleDeaths: killedPlayers.length > 1
         });
 
         // Kazanan kontrolü
@@ -271,9 +324,36 @@ class GameManager {
 
         // Oyuncuyu ele
         let eliminatedPlayer = null;
+        let jesterWin = false;
+
         if (eliminated) {
             const player = room.players.get(eliminated);
             if (player) {
+                // JESTER KONTROLÜ - Asılan kişi Jester mi?
+                if (player.role === ROLES.JESTER) {
+                    jesterWin = true;
+                    player.isAlive = false;
+                    room.deadPlayers.add(eliminated);
+                    eliminatedPlayer = player;
+
+                    // Jester kazandı - oyunu bitir
+                    this.io.to(roomCode).emit('vote_result', {
+                        eliminated: {
+                            id: player.id,
+                            name: player.name,
+                            role: player.role,
+                            voteCount: maxVotes
+                        },
+                        tie: false,
+                        jesterWin: true
+                    });
+
+                    // Jester kazandı olarak oyunu bitir
+                    this.endGame(roomCode, 'jester');
+                    return;
+                }
+
+                // Normal eleme
                 player.isAlive = false;
                 room.deadPlayers.add(eliminated);
                 eliminatedPlayer = player;
@@ -288,7 +368,8 @@ class GameManager {
                 role: eliminatedPlayer.role,
                 voteCount: maxVotes
             } : null,
-            tie: maxVoteTargets.length > 1
+            tie: maxVoteTargets.length > 1,
+            jesterWin: false
         });
 
         // Kazanan kontrolü
@@ -314,7 +395,10 @@ class GameManager {
 
         const alivePlayers = Array.from(room.players.values()).filter(p => p.isAlive);
         const aliveVampires = alivePlayers.filter(p => p.role === ROLES.VAMPIR);
-        const aliveVillagers = alivePlayers.filter(p => p.role !== ROLES.VAMPIR);
+        // Jester neutral olduğu için köylü sayısına dahil değil
+        const aliveVillagers = alivePlayers.filter(p =>
+            p.role !== ROLES.VAMPIR && p.role !== ROLES.JESTER
+        );
 
         // Tüm vampirler öldü - köylüler kazandı
         if (aliveVampires.length === 0) {
@@ -322,6 +406,7 @@ class GameManager {
         }
 
         // Vampirler eşit veya fazla - vampirler kazandı
+        // (Jester sayılmaz)
         if (aliveVampires.length >= aliveVillagers.length) {
             return 'vampires';
         }

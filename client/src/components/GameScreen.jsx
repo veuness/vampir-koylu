@@ -6,7 +6,9 @@ const ROLE_INFO = {
     vampir: { name: 'Vampir', emoji: '🧛', color: 'text-vampire-400', bgColor: 'from-vampire-700 to-vampire-900' },
     koylu: { name: 'Köylü', emoji: '👨‍🌾', color: 'text-emerald-400', bgColor: 'from-emerald-700 to-emerald-900' },
     doktor: { name: 'Doktor', emoji: '👨‍⚕️', color: 'text-cyan-400', bgColor: 'from-cyan-700 to-cyan-900' },
-    gozcu: { name: 'Gözcü', emoji: '🔮', color: 'text-purple-400', bgColor: 'from-purple-700 to-purple-900' }
+    gozcu: { name: 'Gözcü', emoji: '🔮', color: 'text-purple-400', bgColor: 'from-purple-700 to-purple-900' },
+    jester: { name: 'Jester', emoji: '🃏', color: 'text-yellow-400', bgColor: 'from-yellow-700 to-yellow-900' },
+    eskort: { name: 'Eskort', emoji: '💃', color: 'text-pink-400', bgColor: 'from-pink-700 to-pink-900' }
 };
 
 // Faz bilgileri
@@ -35,6 +37,7 @@ function GameScreen({
     const [selectedTarget, setSelectedTarget] = useState(null);
     const [hasActed, setHasActed] = useState(false);
     const [showChat, setShowChat] = useState(false);
+    const [eskortStayHome, setEskortStayHome] = useState(false);
 
     const roleInfo = ROLE_INFO[myRole] || ROLE_INFO.koylu;
     const phaseInfo = PHASE_INFO[gameState?.phase] || PHASE_INFO.night;
@@ -48,6 +51,7 @@ function GameScreen({
     useEffect(() => {
         setSelectedTarget(null);
         setHasActed(false);
+        setEskortStayHome(false);
     }, [gameState?.phase]);
 
     // Chat toggle handler
@@ -58,13 +62,29 @@ function GameScreen({
 
     // Gece aksiyonu gönder
     const handleNightAction = async () => {
-        if (!selectedTarget || hasActed) return;
+        if (hasActed) return;
 
-        let actionType = 'vampir_kill';
-        if (myRole === 'doktor') actionType = 'doktor_save';
-        else if (myRole === 'gozcu') actionType = 'gozcu_check';
+        let actionType = '';
+        let targetId = selectedTarget;
 
-        await onNightAction(selectedTarget, actionType);
+        if (myRole === 'vampir') {
+            if (!selectedTarget) return;
+            actionType = 'vampir_kill';
+        } else if (myRole === 'doktor') {
+            if (!selectedTarget) return;
+            actionType = 'doktor_save';
+        } else if (myRole === 'gozcu') {
+            if (!selectedTarget) return;
+            actionType = 'gozcu_check';
+        } else if (myRole === 'eskort') {
+            actionType = 'eskort_visit';
+            targetId = eskortStayHome ? null : selectedTarget;
+            if (!eskortStayHome && !selectedTarget) return;
+        } else {
+            return;
+        }
+
+        await onNightAction(targetId, actionType);
         setHasActed(true);
     };
 
@@ -84,8 +104,8 @@ function GameScreen({
 
         // Gece fazında
         if (gameState?.phase === 'night') {
-            // Köylü seçemez
-            if (myRole === 'koylu') return false;
+            // Köylü ve Jester seçemez
+            if (myRole === 'koylu' || myRole === 'jester') return false;
             // Vampir başka vampiri öldüremez
             if (myRole === 'vampir' && teammates.includes(player.name)) return false;
         }
@@ -95,23 +115,29 @@ function GameScreen({
 
     // Oyun bitti ekranı
     if (gameState?.phase === 'ended') {
-        const isVampirWin = gameState.winner === 'vampires';
+        const winner = gameState.winner;
         const allPlayers = gameState.allPlayers || players;
+
+        const winnerEmoji = winner === 'jester' ? '🃏' : winner === 'vampires' ? '🧛' : '👨‍🌾';
+        const winnerText = winner === 'jester' ? 'Jester Kazandı!' :
+            winner === 'vampires' ? 'Vampirler Kazandı!' : 'Köylüler Kazandı!';
+        const winnerColor = winner === 'jester' ? 'text-yellow-400' :
+            winner === 'vampires' ? 'text-vampire-400' : 'text-emerald-400';
 
         return (
             <div className="min-h-screen flex items-center justify-center p-4">
                 <div className="card max-w-lg w-full text-center">
                     <div className="mb-6">
                         <span className="text-6xl block mb-4 animate-float">
-                            {isVampirWin ? '🧛' : '👨‍🌾'}
+                            {winnerEmoji}
                         </span>
-                        <h1 className={`font-gothic text-4xl mb-2 ${isVampirWin ? 'text-vampire-400' : 'text-emerald-400'}`}>
-                            {isVampirWin ? 'Vampirler Kazandı!' : 'Köylüler Kazandı!'}
+                        <h1 className={`font-gothic text-4xl mb-2 ${winnerColor}`}>
+                            {winnerText}
                         </h1>
                         <p className="text-gray-400">
-                            {isVampirWin
-                                ? 'Karanlık köye hakim oldu...'
-                                : 'Köy vampirlerden kurtuldu!'}
+                            {winner === 'jester' && 'Jester herkesi kandırdı!'}
+                            {winner === 'vampires' && 'Karanlık köye hakim oldu...'}
+                            {winner === 'villagers' && 'Köy vampirlerden kurtuldu!'}
                         </p>
                     </div>
 
@@ -213,6 +239,8 @@ function GameScreen({
                                     {myRole === 'koylu' && 'Vampirleri bul ve gündüz oylamasında elemeye çalış.'}
                                     {myRole === 'doktor' && 'Her gece bir kişiyi vampirlerden koruyabilirsin.'}
                                     {myRole === 'gozcu' && 'Her gece bir kişinin vampir olup olmadığını öğrenebilirsin.'}
+                                    {myRole === 'jester' && 'Amacın köy halkını seni asmaları için kandırmak! Asılırsan kazanırsın!'}
+                                    {myRole === 'eskort' && 'Her gece birini ziyaret edebilir veya evde kalabilirsin. Dikkat: Ziyaret ettiğin kişi saldırıya uğrarsa sen de ölürsün!'}
                                 </p>
                                 {teammates.length > 0 && (
                                     <div className="mt-4 p-3 bg-black/30 rounded-lg">
@@ -240,6 +268,8 @@ function GameScreen({
                                         {myRole === 'vampir' && '🧛 Öldürmek istediğin köylüyü seç'}
                                         {myRole === 'doktor' && '👨‍⚕️ Korumak istediğin kişiyi seç'}
                                         {myRole === 'gozcu' && '🔮 Sorgulamak istediğin kişiyi seç'}
+                                        {myRole === 'eskort' && '💃 Ziyaret etmek istediğin kişiyi seç veya evde kal'}
+                                        {myRole === 'jester' && '🃏 Gece boyunca bekle... Gündüz seni asmaları için kandır!'}
                                         {myRole === 'koylu' && '😴 Uyu ve sabahı bekle...'}
                                     </div>
                                 )}
@@ -257,13 +287,31 @@ function GameScreen({
                                 )}
                             </div>
 
+                            {/* Eskort evde kal seçeneği */}
+                            {gameState?.phase === 'night' && myRole === 'eskort' && isAlive && (
+                                <div className="mb-4 flex justify-center">
+                                    <button
+                                        onClick={() => {
+                                            setEskortStayHome(!eskortStayHome);
+                                            if (!eskortStayHome) setSelectedTarget(null);
+                                        }}
+                                        className={`px-6 py-3 rounded-lg font-medium transition-all ${eskortStayHome
+                                                ? 'bg-pink-600 text-white ring-2 ring-pink-400'
+                                                : 'bg-night-800 text-gray-300 hover:bg-night-700'
+                                            }`}
+                                    >
+                                        🏠 Evde Kal {eskortStayHome && '✓'}
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Oyuncu kartları */}
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
                                 {players.map(player => {
                                     const isMe = player.id === playerId;
                                     const isTeammate = myRole === 'vampir' && teammates.includes(player.name);
                                     const isSelected = selectedTarget === player.id;
-                                    const selectable = canSelect(player) && !hasActed;
+                                    const selectable = canSelect(player) && !hasActed && !(myRole === 'eskort' && eskortStayHome);
 
                                     return (
                                         <button
@@ -298,15 +346,17 @@ function GameScreen({
                             {/* Aksiyon butonu */}
                             {isAlive && (gameState?.phase === 'night' || gameState?.phase === 'voting') && (
                                 <div className="text-center">
-                                    {gameState?.phase === 'night' && myRole !== 'koylu' && (
+                                    {gameState?.phase === 'night' && myRole !== 'koylu' && myRole !== 'jester' && (
                                         <button
                                             onClick={handleNightAction}
-                                            disabled={!selectedTarget || hasActed}
+                                            disabled={(!selectedTarget && !eskortStayHome) || hasActed}
                                             className="btn-primary px-8"
                                         >
                                             {hasActed ? '✅ Aksiyon Gönderildi' :
                                                 myRole === 'vampir' ? '🩸 Saldır' :
-                                                    myRole === 'doktor' ? '💉 Koru' : '🔮 Sorgula'}
+                                                    myRole === 'doktor' ? '💉 Koru' :
+                                                        myRole === 'gozcu' ? '🔮 Sorgula' :
+                                                            myRole === 'eskort' ? (eskortStayHome ? '🏠 Evde Kal' : '💃 Ziyaret Et') : 'Gönder'}
                                         </button>
                                     )}
 

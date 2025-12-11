@@ -3,7 +3,9 @@ const ROLES = {
   VAMPIR: 'vampir',
   KOYLU: 'koylu',
   DOKTOR: 'doktor',
-  GOZCU: 'gozcu'
+  GOZCU: 'gozcu',
+  JESTER: 'jester',
+  ESKORT: 'eskort'
 };
 
 // Oyun Fazları
@@ -32,6 +34,8 @@ const DEFAULT_ROOM_CONFIG = {
     vampir: 2,
     doktor: 1,
     gozcu: 1,
+    jester: 0,
+    eskort: 0,
     koylu: 4
   },
   timers: {
@@ -42,15 +46,15 @@ const DEFAULT_ROOM_CONFIG = {
 
 // Rol Dağılımı (oyuncu sayısına göre) - Otomatik mod için
 const ROLE_DISTRIBUTION = {
-  4: { vampir: 1, doktor: 0, gozcu: 0, koylu: 3 },
-  5: { vampir: 1, doktor: 1, gozcu: 0, koylu: 3 },
-  6: { vampir: 1, doktor: 1, gozcu: 1, koylu: 3 },
-  7: { vampir: 2, doktor: 1, gozcu: 1, koylu: 3 },
-  8: { vampir: 2, doktor: 1, gozcu: 1, koylu: 4 },
-  9: { vampir: 2, doktor: 1, gozcu: 1, koylu: 5 },
-  10: { vampir: 3, doktor: 1, gozcu: 1, koylu: 5 },
-  11: { vampir: 3, doktor: 1, gozcu: 1, koylu: 6 },
-  12: { vampir: 3, doktor: 2, gozcu: 1, koylu: 6 }
+  4: { vampir: 1, doktor: 0, gozcu: 0, jester: 0, eskort: 0, koylu: 3 },
+  5: { vampir: 1, doktor: 1, gozcu: 0, jester: 0, eskort: 0, koylu: 3 },
+  6: { vampir: 1, doktor: 1, gozcu: 1, jester: 0, eskort: 0, koylu: 3 },
+  7: { vampir: 2, doktor: 1, gozcu: 1, jester: 0, eskort: 0, koylu: 3 },
+  8: { vampir: 2, doktor: 1, gozcu: 1, jester: 0, eskort: 1, koylu: 3 },
+  9: { vampir: 2, doktor: 1, gozcu: 1, jester: 1, eskort: 1, koylu: 3 },
+  10: { vampir: 3, doktor: 1, gozcu: 1, jester: 1, eskort: 1, koylu: 3 },
+  11: { vampir: 3, doktor: 1, gozcu: 1, jester: 1, eskort: 1, koylu: 4 },
+  12: { vampir: 3, doktor: 2, gozcu: 1, jester: 1, eskort: 1, koylu: 4 }
 };
 
 // Rol Açıklamaları
@@ -58,22 +62,38 @@ const ROLE_DESCRIPTIONS = {
   vampir: {
     name: 'Vampir',
     description: 'Geceleri köylüleri avla. Diğer vampirleri görebilirsin.',
-    emoji: '🧛'
+    emoji: '🧛',
+    team: 'vampir'
   },
   koylu: {
     name: 'Köylü',
     description: 'Vampirleri bul ve gündüz oylamasında elemeye çalış.',
-    emoji: '👨‍🌾'
+    emoji: '👨‍🌾',
+    team: 'villager'
   },
   doktor: {
     name: 'Doktor',
     description: 'Her gece bir kişiyi vampirlerden koruyabilirsin.',
-    emoji: '👨‍⚕️'
+    emoji: '👨‍⚕️',
+    team: 'villager'
   },
   gozcu: {
     name: 'Gözcü',
     description: 'Her gece bir kişinin vampir olup olmadığını öğrenebilirsin.',
-    emoji: '🔮'
+    emoji: '🔮',
+    team: 'villager'
+  },
+  jester: {
+    name: 'Jester',
+    description: 'Amacın: Köy halkını seni asmaları için kandır! Asılırsan tek başına kazanırsın.',
+    emoji: '🃏',
+    team: 'neutral'
+  },
+  eskort: {
+    name: 'Eskort',
+    description: 'Her gece birini ziyaret edebilir veya evde kalabilirsin. Ziyaret ettiğin kişi saldırıya uğrarsa sen de ölürsün!',
+    emoji: '💃',
+    team: 'villager'
   }
 };
 
