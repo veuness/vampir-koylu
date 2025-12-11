@@ -5,7 +5,8 @@ const ROLES = {
   DOKTOR: 'doktor',
   GOZCU: 'gozcu',
   JESTER: 'jester',
-  ESKORT: 'eskort'
+  ESKORT: 'eskort',
+  MEZAR_HIRSIZI: 'mezar_hirsizi'
 };
 
 // Oyun Fazları
@@ -36,6 +37,7 @@ const DEFAULT_ROOM_CONFIG = {
     gozcu: 1,
     jester: 0,
     eskort: 0,
+    mezar_hirsizi: 0,
     koylu: 4
   },
   timers: {
@@ -46,15 +48,15 @@ const DEFAULT_ROOM_CONFIG = {
 
 // Rol Dağılımı (oyuncu sayısına göre) - Otomatik mod için
 const ROLE_DISTRIBUTION = {
-  4: { vampir: 1, doktor: 0, gozcu: 0, jester: 0, eskort: 0, koylu: 3 },
-  5: { vampir: 1, doktor: 1, gozcu: 0, jester: 0, eskort: 0, koylu: 3 },
-  6: { vampir: 1, doktor: 1, gozcu: 1, jester: 0, eskort: 0, koylu: 3 },
-  7: { vampir: 2, doktor: 1, gozcu: 1, jester: 0, eskort: 0, koylu: 3 },
-  8: { vampir: 2, doktor: 1, gozcu: 1, jester: 0, eskort: 1, koylu: 3 },
-  9: { vampir: 2, doktor: 1, gozcu: 1, jester: 1, eskort: 1, koylu: 3 },
-  10: { vampir: 3, doktor: 1, gozcu: 1, jester: 1, eskort: 1, koylu: 3 },
-  11: { vampir: 3, doktor: 1, gozcu: 1, jester: 1, eskort: 1, koylu: 4 },
-  12: { vampir: 3, doktor: 2, gozcu: 1, jester: 1, eskort: 1, koylu: 4 }
+  4: { vampir: 1, doktor: 0, gozcu: 0, jester: 0, eskort: 0, mezar_hirsizi: 0, koylu: 3 },
+  5: { vampir: 1, doktor: 1, gozcu: 0, jester: 0, eskort: 0, mezar_hirsizi: 0, koylu: 3 },
+  6: { vampir: 1, doktor: 1, gozcu: 1, jester: 0, eskort: 0, mezar_hirsizi: 0, koylu: 3 },
+  7: { vampir: 2, doktor: 1, gozcu: 1, jester: 0, eskort: 0, mezar_hirsizi: 0, koylu: 3 },
+  8: { vampir: 2, doktor: 1, gozcu: 1, jester: 0, eskort: 1, mezar_hirsizi: 0, koylu: 3 },
+  9: { vampir: 2, doktor: 1, gozcu: 1, jester: 1, eskort: 1, mezar_hirsizi: 0, koylu: 3 },
+  10: { vampir: 3, doktor: 1, gozcu: 1, jester: 1, eskort: 1, mezar_hirsizi: 1, koylu: 2 },
+  11: { vampir: 3, doktor: 1, gozcu: 1, jester: 1, eskort: 1, mezar_hirsizi: 1, koylu: 3 },
+  12: { vampir: 3, doktor: 2, gozcu: 1, jester: 1, eskort: 1, mezar_hirsizi: 1, koylu: 3 }
 };
 
 // Rol Açıklamaları
@@ -93,6 +95,12 @@ const ROLE_DESCRIPTIONS = {
     name: 'Eskort',
     description: 'Her gece birini ziyaret edebilir veya evde kalabilirsin. Ziyaret ettiğin kişi saldırıya uğrarsa sen de ölürsün!',
     emoji: '💃',
+    team: 'villager'
+  },
+  mezar_hirsizi: {
+    name: 'Mezar Hırsızı',
+    description: 'İlk gece bir hedef seç. Hedefin öldüğünde onun rolüne dönüşürsün! Dikkat: Vampir olabilirsin.',
+    emoji: '⚰️',
     team: 'villager'
   }
 };

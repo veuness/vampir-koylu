@@ -11,6 +11,7 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
             gozcu: 1,
             jester: 0,
             eskort: 0,
+            mezar_hirsizi: 0,
             koylu: 4
         },
         timers: {
@@ -216,6 +217,23 @@ function CreateRoomModal({ onClose, onCreateRoom }) {
                                     className="input-dark text-center text-sm"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">Ziyaret edebilir</p>
+                            </div>
+
+                            {/* Mezar Hırsızı */}
+                            <div className="bg-night-800 p-3 rounded-lg border border-gray-600/30">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xl">⚰️</span>
+                                    <span className="text-gray-400 font-medium text-sm">Mezar Hırsızı</span>
+                                </div>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="1"
+                                    value={config.roles.mezar_hirsizi || 0}
+                                    onChange={(e) => updateRole('mezar_hirsizi', e.target.value)}
+                                    className="input-dark text-center text-sm"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Rol çalar!</p>
                             </div>
 
                             {/* Köylü */}

@@ -8,7 +8,8 @@ const ROLE_INFO = {
     doktor: { name: 'Doktor', emoji: '👨‍⚕️', color: 'text-cyan-400', bgColor: 'from-cyan-700 to-cyan-900' },
     gozcu: { name: 'Gözcü', emoji: '🔮', color: 'text-purple-400', bgColor: 'from-purple-700 to-purple-900' },
     jester: { name: 'Jester', emoji: '🃏', color: 'text-yellow-400', bgColor: 'from-yellow-700 to-yellow-900' },
-    eskort: { name: 'Eskort', emoji: '💃', color: 'text-pink-400', bgColor: 'from-pink-700 to-pink-900' }
+    eskort: { name: 'Eskort', emoji: '💃', color: 'text-pink-400', bgColor: 'from-pink-700 to-pink-900' },
+    mezar_hirsizi: { name: 'Mezar Hırsızı', emoji: '⚰️', color: 'text-gray-400', bgColor: 'from-gray-700 to-gray-900' }
 };
 
 // Faz bilgileri
@@ -80,6 +81,11 @@ function GameScreen({
             actionType = 'eskort_visit';
             targetId = eskortStayHome ? null : selectedTarget;
             if (!eskortStayHome && !selectedTarget) return;
+        } else if (myRole === 'mezar_hirsizi') {
+            // Mezar Hırsızı sadece ilk gece hedef seçer
+            if (gameState?.round !== 1) return;
+            if (!selectedTarget) return;
+            actionType = 'mezar_hirsizi_target';
         } else {
             return;
         }
@@ -106,6 +112,8 @@ function GameScreen({
         if (gameState?.phase === 'night') {
             // Köylü ve Jester seçemez
             if (myRole === 'koylu' || myRole === 'jester') return false;
+            // Mezar Hırsızı sadece ilk gece seçebilir
+            if (myRole === 'mezar_hirsizi' && gameState?.round !== 1) return false;
             // Vampir başka vampiri öldüremez
             if (myRole === 'vampir' && teammates.includes(player.name)) return false;
         }
@@ -241,6 +249,7 @@ function GameScreen({
                                     {myRole === 'gozcu' && 'Her gece bir kişinin vampir olup olmadığını öğrenebilirsin.'}
                                     {myRole === 'jester' && 'Amacın köy halkını seni asmaları için kandırmak! Asılırsan kazanırsın!'}
                                     {myRole === 'eskort' && 'Her gece birini ziyaret edebilir veya evde kalabilirsin. Dikkat: Ziyaret ettiğin kişi saldırıya uğrarsa sen de ölürsün!'}
+                                    {myRole === 'mezar_hirsizi' && 'İlk gece bir hedef seç. Hedefin öldüğünde onun rolüne dönüşürsün!'}
                                 </p>
                                 {teammates.length > 0 && (
                                     <div className="mt-4 p-3 bg-black/30 rounded-lg">
@@ -269,6 +278,8 @@ function GameScreen({
                                         {myRole === 'doktor' && '👨‍⚕️ Korumak istediğin kişiyi seç'}
                                         {myRole === 'gozcu' && '🔮 Sorgulamak istediğin kişiyi seç'}
                                         {myRole === 'eskort' && '💃 Ziyaret etmek istediğin kişiyi seç veya evde kal'}
+                                        {myRole === 'mezar_hirsizi' && gameState?.round === 1 && '⚰️ Hedefini seç! Öldüğünde onun rolüne dönüşeceksin.'}
+                                        {myRole === 'mezar_hirsizi' && gameState?.round !== 1 && '⚰️ Hedefinin ölmesini bekle...'}
                                         {myRole === 'jester' && '🃏 Gece boyunca bekle... Gündüz seni asmaları için kandır!'}
                                         {myRole === 'koylu' && '😴 Uyu ve sabahı bekle...'}
                                     </div>
@@ -296,8 +307,8 @@ function GameScreen({
                                             if (!eskortStayHome) setSelectedTarget(null);
                                         }}
                                         className={`px-6 py-3 rounded-lg font-medium transition-all ${eskortStayHome
-                                                ? 'bg-pink-600 text-white ring-2 ring-pink-400'
-                                                : 'bg-night-800 text-gray-300 hover:bg-night-700'
+                                            ? 'bg-pink-600 text-white ring-2 ring-pink-400'
+                                            : 'bg-night-800 text-gray-300 hover:bg-night-700'
                                             }`}
                                     >
                                         🏠 Evde Kal {eskortStayHome && '✓'}
@@ -346,7 +357,7 @@ function GameScreen({
                             {/* Aksiyon butonu */}
                             {isAlive && (gameState?.phase === 'night' || gameState?.phase === 'voting') && (
                                 <div className="text-center">
-                                    {gameState?.phase === 'night' && myRole !== 'koylu' && myRole !== 'jester' && (
+                                    {gameState?.phase === 'night' && myRole !== 'koylu' && myRole !== 'jester' && !(myRole === 'mezar_hirsizi' && gameState?.round !== 1) && (
                                         <button
                                             onClick={handleNightAction}
                                             disabled={(!selectedTarget && !eskortStayHome) || hasActed}
@@ -356,7 +367,8 @@ function GameScreen({
                                                 myRole === 'vampir' ? '🩸 Saldır' :
                                                     myRole === 'doktor' ? '💉 Koru' :
                                                         myRole === 'gozcu' ? '🔮 Sorgula' :
-                                                            myRole === 'eskort' ? (eskortStayHome ? '🏠 Evde Kal' : '💃 Ziyaret Et') : 'Gönder'}
+                                                            myRole === 'eskort' ? (eskortStayHome ? '🏠 Evde Kal' : '💃 Ziyaret Et') :
+                                                                myRole === 'mezar_hirsizi' ? '⚰️ Hedefi Kilitle' : 'Gönder'}
                                         </button>
                                     )}
 

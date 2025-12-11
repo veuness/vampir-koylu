@@ -5,6 +5,7 @@ import LobbyScreen from './components/LobbyScreen';
 import WaitingRoom from './components/WaitingRoom';
 import GameScreen from './components/GameScreen';
 import OnlinePlayersPanel from './components/OnlinePlayersPanel';
+import CharactersModal from './components/CharactersModal';
 
 // Oyun ekranları
 const SCREENS = {
@@ -48,6 +49,9 @@ function App() {
 
     // Error/notification
     const [notification, setNotification] = useState(null);
+
+    // Characters Modal
+    const [showCharactersModal, setShowCharactersModal] = useState(false);
 
     // LocalStorage'dan isim kontrolü
     useEffect(() => {
@@ -449,6 +453,24 @@ function App() {
                     />
                 )}
             </div>
+
+            {/* Karakterler Butonu (Sağ alt) */}
+            {screen !== SCREENS.WELCOME && (
+                <button
+                    onClick={() => setShowCharactersModal(true)}
+                    className="fixed bottom-4 left-4 z-40 bg-gradient-to-r from-vampire-700 to-vampire-800
+                               hover:from-vampire-600 hover:to-vampire-700 text-white px-4 py-3 rounded-xl
+                               shadow-lg transition-all duration-200 flex items-center gap-2 border border-vampire-600/50"
+                >
+                    <span className="text-xl">📖</span>
+                    <span className="hidden sm:inline font-medium">Karakterler</span>
+                </button>
+            )}
+
+            {/* Characters Modal */}
+            {showCharactersModal && (
+                <CharactersModal onClose={() => setShowCharactersModal(false)} />
+            )}
         </div>
     );
 }
