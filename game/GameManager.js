@@ -1,4 +1,4 @@
-const { PHASES, ROLES, TIMERS, ROLE_DESCRIPTIONS } = require('./constants');
+const { PHASES, ROLES, DEFAULT_TIMERS, ROLE_DESCRIPTIONS } = require('./constants');
 const roomManager = require('./RoomManager');
 
 class GameManager {
@@ -29,7 +29,7 @@ class GameManager {
         this.broadcastRoles(roomCode);
 
         // Rol gösterimi sonrası geceye geç
-        this.startTimer(roomCode, TIMERS.ROLE_REVEAL, () => {
+        this.startTimer(roomCode, DEFAULT_TIMERS.ROLE_REVEAL, () => {
             this.startNightPhase(roomCode);
         });
 
@@ -74,14 +74,15 @@ class GameManager {
         room.phase = PHASES.NIGHT;
         room.nightActions = {
             vampirTarget: null,
-            buyucuTarget: null,
+            doktorTarget: null,
+            gozcuResults: new Map(),
             vampirVotes: new Map()
         };
 
         this.broadcastGameState(roomCode);
 
         // Gece zamanlayıcısı
-        this.startTimer(roomCode, TIMERS.NIGHT, () => {
+        this.startTimer(roomCode, DEFAULT_TIMERS.NIGHT, () => {
             this.processNightActions(roomCode);
         });
     }
@@ -94,8 +95,8 @@ class GameManager {
         const player = room.players.get(playerId);
         if (!player || !player.isAlive) return { success: false };
 
+        // Vampir saldırısı
         if (actionType === 'vampir_kill' && player.role === ROLES.VAMPIR) {
-            // Vampir oyu
             room.nightActions.vampirVotes.set(playerId, targetId);
 
             // Tüm vampirler oy verdiyse hedefi belirle
@@ -103,7 +104,6 @@ class GameManager {
                 .filter(p => p.role === ROLES.VAMPIR && p.isAlive);
 
             if (room.nightActions.vampirVotes.size >= aliveVampires.length) {
-                // En çok oy alan hedefi bul
                 const votes = {};
                 for (const target of room.nightActions.vampirVotes.values()) {
                     votes[target] = (votes[target] || 0) + 1;
@@ -116,8 +116,29 @@ class GameManager {
             return { success: true };
         }
 
-        if (actionType === 'buyucu_save' && player.role === ROLES.BUYUCU) {
-            room.nightActions.buyucuTarget = targetId;
+        // Doktor koruma
+        if (actionType === 'doktor_save' && player.role === ROLES.DOKTOR) {
+            room.nightActions.doktorTarget = targetId;
+            return { success: true };
+        }
+
+        // Gözcü sorgulama
+        if (actionType === 'gozcu_check' && player.role === ROLES.GOZCU) {
+            const targetPlayer = room.players.get(targetId);
+            if (targetPlayer) {
+                const isVampir = targetPlayer.role === ROLES.VAMPIR;
+                room.nightActions.gozcuResults.set(playerId, {
+                    targetId,
+                    targetName: targetPlayer.name,
+                    isVampir
+                });
+
+                // Gözcüye sonucu bildir
+                this.io.to(playerId).emit('gozcu_result', {
+                    targetName: targetPlayer.name,
+                    isVampir
+                });
+            }
             return { success: true };
         }
 
@@ -131,10 +152,10 @@ class GameManager {
 
         let killedPlayer = null;
         const vampirTarget = room.nightActions.vampirTarget;
-        const buyucuTarget = room.nightActions.buyucuTarget;
+        const doktorTarget = room.nightActions.doktorTarget;
 
-        // Eğer vampir hedefi büyücü tarafından korunmadıysa öldür
-        if (vampirTarget && vampirTarget !== buyucuTarget) {
+        // Eğer vampir hedefi doktor tarafından korunmadıysa öldür
+        if (vampirTarget && vampirTarget !== doktorTarget) {
             const target = room.players.get(vampirTarget);
             if (target && target.isAlive) {
                 target.isAlive = false;
@@ -149,7 +170,7 @@ class GameManager {
                 id: killedPlayer.id,
                 name: killedPlayer.name
             } : null,
-            saved: vampirTarget === buyucuTarget && vampirTarget ? true : false
+            saved: vampirTarget === doktorTarget && vampirTarget ? true : false
         });
 
         // Kazanan kontrolü
@@ -172,8 +193,10 @@ class GameManager {
 
         this.broadcastGameState(roomCode);
 
-        // Gündüz zamanlayıcısı
-        this.startTimer(roomCode, TIMERS.DAY, () => {
+        // Oda config'inden gündüz süresini al
+        const dayTime = room.config?.timers?.day || DEFAULT_TIMERS.DAY;
+
+        this.startTimer(roomCode, dayTime, () => {
             this.startVotingPhase(roomCode);
         });
     }
@@ -188,8 +211,10 @@ class GameManager {
 
         this.broadcastGameState(roomCode);
 
-        // Oylama zamanlayıcısı
-        this.startTimer(roomCode, TIMERS.VOTING, () => {
+        // Oda config'inden oylama süresini al
+        const votingTime = room.config?.timers?.voting || DEFAULT_TIMERS.VOTING;
+
+        this.startTimer(roomCode, votingTime, () => {
             this.processVotes(roomCode);
         });
     }
@@ -241,7 +266,6 @@ class GameManager {
         // Beraberlik kontrolü
         const maxVoteTargets = Object.keys(voteCounts).filter(t => voteCounts[t] === maxVotes);
         if (maxVoteTargets.length > 1) {
-            // Beraberlik - kimse elenmez
             eliminated = null;
         }
 

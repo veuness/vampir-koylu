@@ -29,6 +29,15 @@ const io = new Server(server, {
 // GameManager'a io instance'ı ver
 gameManager.setIO(io);
 
+// Online oyuncuları takip et
+const onlinePlayers = new Map(); // socketId -> { id, name }
+
+// Online oyuncu listesini yayınla
+function broadcastOnlinePlayers() {
+    const players = Array.from(onlinePlayers.values());
+    io.emit('online_players', players);
+}
+
 // Statik dosyaları sun (React build)
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -39,6 +48,10 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/rooms', (req, res) => {
     res.json(roomManager.getPublicRooms());
+});
+
+app.get('/api/online-count', (req, res) => {
+    res.json({ count: onlinePlayers.size });
 });
 
 // SPA fallback - tüm diğer route'ları React'e yönlendir
@@ -64,12 +77,26 @@ io.on('connection', (socket) => {
             return;
         }
         currentPlayer.name = name.trim().substring(0, 20);
+
+        // Online oyunculara ekle
+        onlinePlayers.set(socket.id, {
+            id: socket.id,
+            name: currentPlayer.name
+        });
+        broadcastOnlinePlayers();
+
         callback({ success: true, name: currentPlayer.name });
-        console.log(`👤 İsim belirlendi: ${currentPlayer.name}`);
+        console.log(`👤 İsim belirlendi: ${currentPlayer.name} (Online: ${onlinePlayers.size})`);
     });
 
-    // Oda oluştur
-    socket.on('create_room', (callback) => {
+    // Oda oluştur (config ile)
+    socket.on('create_room', (config, callback) => {
+        // Eski format desteği (callback ilk parametre olarak)
+        if (typeof config === 'function') {
+            callback = config;
+            config = {};
+        }
+
         if (!currentPlayer.name) {
             callback({ success: false, error: 'Önce isim belirlemelisin!' });
             return;
@@ -81,12 +108,12 @@ io.on('connection', (socket) => {
             socket.leave(currentPlayer.roomCode);
         }
 
-        const room = roomManager.createRoom(socket.id, currentPlayer.name);
+        const room = roomManager.createRoom(socket.id, currentPlayer.name, config || {});
         currentPlayer.roomCode = room.code;
         socket.join(room.code);
 
-        callback({ success: true, roomCode: room.code });
-        console.log(`🏠 Oda oluşturuldu: ${room.code} by ${currentPlayer.name}`);
+        callback({ success: true, roomCode: room.code, config: room.config });
+        console.log(`🏠 Oda oluşturuldu: ${room.code} (${room.config.roomName}) by ${currentPlayer.name}`);
 
         // Oda listesini güncelle
         io.emit('rooms_updated', roomManager.getPublicRooms());
@@ -109,7 +136,7 @@ io.on('connection', (socket) => {
         currentPlayer.roomCode = roomCode.toUpperCase();
         socket.join(currentPlayer.roomCode);
 
-        callback({ success: true, roomCode: currentPlayer.roomCode });
+        callback({ success: true, roomCode: currentPlayer.roomCode, config: result.room.config });
         console.log(`🚪 ${currentPlayer.name} odaya katıldı: ${currentPlayer.roomCode}`);
 
         // Odadaki herkese bildir
@@ -170,7 +197,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Gece aksiyonu (vampir/büyücü)
+    // Gece aksiyonu (vampir/doktor/gozcu)
     socket.on('night_action', ({ targetId, actionType }, callback) => {
         if (!currentPlayer.roomCode) {
             callback({ success: false, error: 'Bir odada değilsin!' });
@@ -224,9 +251,18 @@ io.on('connection', (socket) => {
         callback(roomManager.getPublicRooms());
     });
 
+    // Online oyuncuları iste
+    socket.on('get_online_players', (callback) => {
+        callback(Array.from(onlinePlayers.values()));
+    });
+
     // Bağlantı koptuğunda
     socket.on('disconnect', () => {
         console.log(`🔌 Bağlantı koptu: ${socket.id} (${currentPlayer.name || 'Anonim'})`);
+
+        // Online oyunculardan çıkar
+        onlinePlayers.delete(socket.id);
+        broadcastOnlinePlayers();
 
         if (currentPlayer.roomCode) {
             const room = roomManager.leaveRoom(currentPlayer.roomCode, socket.id);
@@ -265,6 +301,7 @@ io.on('connection', (socket) => {
         io.to(roomCode).emit('room_updated', {
             code: room.code,
             hostId: room.hostId,
+            config: room.config,
             players,
             phase: room.phase
         });

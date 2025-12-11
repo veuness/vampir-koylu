@@ -4,6 +4,7 @@ import WelcomeScreen from './components/WelcomeScreen';
 import LobbyScreen from './components/LobbyScreen';
 import WaitingRoom from './components/WaitingRoom';
 import GameScreen from './components/GameScreen';
+import OnlinePlayersPanel from './components/OnlinePlayersPanel';
 
 // Oyun ekranları
 const SCREENS = {
@@ -35,12 +36,32 @@ function App() {
 
     // Chat
     const [messages, setMessages] = useState([]);
+    const [unreadMessages, setUnreadMessages] = useState(0);
+    const [isChatOpen, setIsChatOpen] = useState(false);
+
+    // Online oyuncular
+    const [onlinePlayers, setOnlinePlayers] = useState([]);
+    const [isOnlinePanelOpen, setIsOnlinePanelOpen] = useState(false);
 
     // Bağlantı durumu
     const [isConnected, setIsConnected] = useState(socket.connected);
 
     // Error/notification
     const [notification, setNotification] = useState(null);
+
+    // LocalStorage'dan isim kontrolü
+    useEffect(() => {
+        const savedName = localStorage.getItem('vampir_player_name');
+        if (savedName && socket.connected) {
+            // Otomatik giriş dene
+            socket.emit('set_name', savedName, (response) => {
+                if (response.success) {
+                    setPlayerName(response.name);
+                    setScreen(SCREENS.LOBBY);
+                }
+            });
+        }
+    }, []);
 
     // Socket bağlantı event'leri
     useEffect(() => {
@@ -67,6 +88,24 @@ function App() {
         return () => {
             socket.off('connect', onConnect);
             socket.off('disconnect', onDisconnect);
+        };
+    }, []);
+
+    // Online oyuncular event'i
+    useEffect(() => {
+        const onOnlinePlayers = (players) => {
+            setOnlinePlayers(players);
+        };
+
+        socket.on('online_players', onOnlinePlayers);
+
+        // İlk listeyi al
+        socket.emit('get_online_players', (players) => {
+            setOnlinePlayers(players || []);
+        });
+
+        return () => {
+            socket.off('online_players', onOnlinePlayers);
         };
     }, []);
 
@@ -99,10 +138,18 @@ function App() {
             if (data.killed) {
                 showNotification(`${data.killed.name} bu gece öldürüldü!`, 'error');
             } else if (data.saved) {
-                showNotification('Büyücü birini kurtardı!', 'success');
+                showNotification('Doktor birini kurtardı!', 'success');
             } else {
                 showNotification('Bu gece kimse ölmedi.', 'info');
             }
+        };
+
+        // Gözcü sonucu
+        const onGozcuResult = (data) => {
+            const resultText = data.isVampir
+                ? `🔮 ${data.targetName} bir VAMPİR!`
+                : `🔮 ${data.targetName} masum görünüyor.`;
+            showNotification(resultText, data.isVampir ? 'warning' : 'info');
         };
 
         // Oylama sonucu
@@ -110,9 +157,11 @@ function App() {
             if (data.tie) {
                 showNotification('Oylar eşit! Kimse elenmedi.', 'info');
             } else if (data.eliminated) {
+                const roleEmoji = data.eliminated.role === 'vampir' ? '🧛' :
+                    data.eliminated.role === 'doktor' ? '👨‍⚕️' :
+                        data.eliminated.role === 'gozcu' ? '🔮' : '👨‍🌾';
                 showNotification(
-                    `${data.eliminated.name} (${data.eliminated.role === 'vampir' ? '🧛 Vampir' :
-                        data.eliminated.role === 'buyucu' ? '🧙 Büyücü' : '👨‍🌾 Köylü'}) elendi!`,
+                    `${data.eliminated.name} (${roleEmoji} ${data.eliminated.role}) elendi!`,
                     'warning'
                 );
             }
@@ -131,6 +180,10 @@ function App() {
         // Chat mesajı
         const onChatMessage = (data) => {
             setMessages(prev => [...prev, data]);
+            // Chat kapalıysa okunmamış sayacını artır
+            if (!isChatOpen) {
+                setUnreadMessages(prev => prev + 1);
+            }
         };
 
         socket.on('room_updated', onRoomUpdated);
@@ -138,6 +191,7 @@ function App() {
         socket.on('game_state', onGameState);
         socket.on('timer_update', onTimerUpdate);
         socket.on('night_result', onNightResult);
+        socket.on('gozcu_result', onGozcuResult);
         socket.on('vote_result', onVoteResult);
         socket.on('game_ended', onGameEnded);
         socket.on('chat_message', onChatMessage);
@@ -148,16 +202,25 @@ function App() {
             socket.off('game_state', onGameState);
             socket.off('timer_update', onTimerUpdate);
             socket.off('night_result', onNightResult);
+            socket.off('gozcu_result', onGozcuResult);
             socket.off('vote_result', onVoteResult);
             socket.off('game_ended', onGameEnded);
             socket.off('chat_message', onChatMessage);
         };
-    }, []);
+    }, [isChatOpen]);
 
     // Bildirim göster
     const showNotification = (message, type = 'info') => {
         setNotification({ message, type });
         setTimeout(() => setNotification(null), 4000);
+    };
+
+    // Chat aç/kapa
+    const handleToggleChat = (isOpen) => {
+        setIsChatOpen(isOpen);
+        if (isOpen) {
+            setUnreadMessages(0);
+        }
     };
 
     // İsim belirleme
@@ -166,6 +229,7 @@ function App() {
             socket.emit('set_name', name, (response) => {
                 if (response.success) {
                     setPlayerName(response.name);
+                    localStorage.setItem('vampir_player_name', response.name);
                     setScreen(SCREENS.LOBBY);
                 } else {
                     showNotification(response.error, 'error');
@@ -175,10 +239,10 @@ function App() {
         });
     }, []);
 
-    // Oda oluştur
-    const handleCreateRoom = useCallback(() => {
+    // Oda oluştur (config ile)
+    const handleCreateRoom = useCallback((config = {}) => {
         return new Promise((resolve) => {
-            socket.emit('create_room', (response) => {
+            socket.emit('create_room', config, (response) => {
                 if (response.success) {
                     setRoomCode(response.roomCode);
                     setScreen(SCREENS.WAITING_ROOM);
@@ -275,6 +339,18 @@ function App() {
         });
     }, []);
 
+    // Çıkış yap
+    const handleLogout = () => {
+        // Socket bağlantısını kapat
+        socket.disconnect();
+
+        // LocalStorage temizle
+        localStorage.removeItem('vampir_player_name');
+
+        // Sayfayı yenile
+        window.location.reload();
+    };
+
     // Ana ekrana dön
     const handleBackToLobby = () => {
         setRoomCode(null);
@@ -283,6 +359,7 @@ function App() {
         setMyRole(null);
         setTeammates([]);
         setMessages([]);
+        setUnreadMessages(0);
         setScreen(SCREENS.LOBBY);
     };
 
@@ -295,56 +372,83 @@ function App() {
                 </div>
             )}
 
+            {/* Logout butonu (Welcome hariç) */}
+            {screen !== SCREENS.WELCOME && playerName && (
+                <button
+                    onClick={handleLogout}
+                    className="fixed top-4 right-4 z-50 bg-night-800/80 hover:bg-vampire-700 
+                     border border-vampire-600/50 text-white px-4 py-2 rounded-lg 
+                     shadow-lg transition-all duration-200 flex items-center gap-2"
+                >
+                    <span className="text-sm">{playerName}</span>
+                    <span className="text-vampire-400">🚪</span>
+                </button>
+            )}
+
             {/* Bildirim */}
             {notification && (
                 <div
-                    className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 animate-fadeIn
+                    className={`fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-50 animate-fadeIn
             ${notification.type === 'error' ? 'bg-red-600' :
                             notification.type === 'success' ? 'bg-green-600' :
                                 notification.type === 'warning' ? 'bg-amber-600' : 'bg-blue-600'}
-            text-white font-medium`}
+            text-white font-medium max-w-md text-center`}
                 >
                     {notification.message}
                 </div>
             )}
 
-            {/* Ekranlar */}
-            {screen === SCREENS.WELCOME && (
-                <WelcomeScreen onSetName={handleSetName} />
-            )}
-
-            {screen === SCREENS.LOBBY && (
-                <LobbyScreen
-                    playerName={playerName}
-                    onCreateRoom={handleCreateRoom}
-                    onJoinRoom={handleJoinRoom}
+            {/* Online Oyuncular Paneli (Lobby ve sonrası) */}
+            {screen !== SCREENS.WELCOME && (
+                <OnlinePlayersPanel
+                    players={onlinePlayers}
+                    isOpen={isOnlinePanelOpen}
+                    onToggle={() => setIsOnlinePanelOpen(!isOnlinePanelOpen)}
                 />
             )}
 
-            {screen === SCREENS.WAITING_ROOM && (
-                <WaitingRoom
-                    roomCode={roomCode}
-                    roomData={roomData}
-                    playerId={playerId}
-                    onStartGame={handleStartGame}
-                    onLeaveRoom={handleLeaveRoom}
-                />
-            )}
+            {/* Ana içerik (panel açıkken sola kaydır) */}
+            <div className={`transition-all duration-300 ${screen !== SCREENS.WELCOME ? 'lg:pl-64' : ''}`}>
+                {/* Ekranlar */}
+                {screen === SCREENS.WELCOME && (
+                    <WelcomeScreen onSetName={handleSetName} />
+                )}
 
-            {screen === SCREENS.GAME && (
-                <GameScreen
-                    gameState={gameState}
-                    myRole={myRole}
-                    teammates={teammates}
-                    playerId={playerId}
-                    timer={timer}
-                    messages={messages}
-                    onNightAction={handleNightAction}
-                    onVote={handleVote}
-                    onSendMessage={handleSendMessage}
-                    onBackToLobby={handleBackToLobby}
-                />
-            )}
+                {screen === SCREENS.LOBBY && (
+                    <LobbyScreen
+                        playerName={playerName}
+                        onCreateRoom={handleCreateRoom}
+                        onJoinRoom={handleJoinRoom}
+                    />
+                )}
+
+                {screen === SCREENS.WAITING_ROOM && (
+                    <WaitingRoom
+                        roomCode={roomCode}
+                        roomData={roomData}
+                        playerId={playerId}
+                        onStartGame={handleStartGame}
+                        onLeaveRoom={handleLeaveRoom}
+                    />
+                )}
+
+                {screen === SCREENS.GAME && (
+                    <GameScreen
+                        gameState={gameState}
+                        myRole={myRole}
+                        teammates={teammates}
+                        playerId={playerId}
+                        timer={timer}
+                        messages={messages}
+                        unreadMessages={unreadMessages}
+                        onNightAction={handleNightAction}
+                        onVote={handleVote}
+                        onSendMessage={handleSendMessage}
+                        onBackToLobby={handleBackToLobby}
+                        onToggleChat={handleToggleChat}
+                    />
+                )}
+            </div>
         </div>
     );
 }

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import socket from '../socket';
+import CreateRoomModal from './CreateRoomModal';
 
 function LobbyScreen({ playerName, onCreateRoom, onJoinRoom }) {
     const [rooms, setRooms] = useState([]);
     const [joinCode, setJoinCode] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('rooms'); // 'rooms' | 'join'
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
     // Oda listesini dinle
     useEffect(() => {
@@ -26,10 +28,11 @@ function LobbyScreen({ playerName, onCreateRoom, onJoinRoom }) {
         };
     }, []);
 
-    const handleCreateRoom = async () => {
+    const handleCreateRoom = async (config) => {
         setIsLoading(true);
         try {
-            await onCreateRoom();
+            await onCreateRoom(config);
+            setShowCreateModal(false);
         } finally {
             setIsLoading(false);
         }
@@ -63,7 +66,7 @@ function LobbyScreen({ playerName, onCreateRoom, onJoinRoom }) {
                 <div className="card mb-6">
                     <div className="flex flex-col sm:flex-row gap-4">
                         <button
-                            onClick={handleCreateRoom}
+                            onClick={() => setShowCreateModal(true)}
                             disabled={isLoading}
                             className="btn-primary flex-1 flex items-center justify-center gap-2"
                         >
@@ -118,7 +121,7 @@ function LobbyScreen({ playerName, onCreateRoom, onJoinRoom }) {
                                border border-vampire-700/30 hover:border-vampire-500/50 transition-all"
                                     >
                                         <div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 mb-1">
                                                 <span className="text-lg font-mono text-vampire-300">
                                                     {room.code}
                                                 </span>
@@ -126,16 +129,19 @@ function LobbyScreen({ playerName, onCreateRoom, onJoinRoom }) {
                                                     {room.playerCount}/{room.maxPlayers}
                                                 </span>
                                             </div>
-                                            <p className="text-sm text-gray-400 mt-1">
+                                            <p className="text-sm text-white font-medium">
+                                                {room.roomName}
+                                            </p>
+                                            <p className="text-xs text-gray-400">
                                                 Host: {room.hostName}
                                             </p>
                                         </div>
                                         <button
                                             onClick={() => handleJoinRoom(room.code)}
-                                            disabled={isLoading}
+                                            disabled={isLoading || room.playerCount >= room.maxPlayers}
                                             className="btn-secondary py-2 px-4"
                                         >
-                                            Katıl
+                                            {room.playerCount >= room.maxPlayers ? 'Dolu' : 'Katıl'}
                                         </button>
                                     </div>
                                 ))}
@@ -183,6 +189,14 @@ function LobbyScreen({ playerName, onCreateRoom, onJoinRoom }) {
                     </p>
                 </div>
             </div>
+
+            {/* Create Room Modal */}
+            {showCreateModal && (
+                <CreateRoomModal
+                    onClose={() => setShowCreateModal(false)}
+                    onCreateRoom={handleCreateRoom}
+                />
+            )}
         </div>
     );
 }

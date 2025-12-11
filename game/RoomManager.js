@@ -1,5 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
-const { PHASES, ROLES, ROLE_DISTRIBUTION, TIMERS } = require('./constants');
+const { PHASES, ROLES, ROLE_DISTRIBUTION, DEFAULT_ROOM_CONFIG } = require('./constants');
 
 class RoomManager {
     constructor() {
@@ -19,19 +18,39 @@ class RoomManager {
         return code;
     }
 
-    // Yeni oda oluştur
-    createRoom(hostId, hostName) {
+    // Yeni oda oluştur (config ile)
+    createRoom(hostId, hostName, config = {}) {
         const roomCode = this.generateRoomCode();
+
+        // Config'i varsayılanlarla birleştir
+        const roomConfig = {
+            roomName: config.roomName || DEFAULT_ROOM_CONFIG.roomName,
+            maxPlayers: Math.min(Math.max(config.maxPlayers || DEFAULT_ROOM_CONFIG.maxPlayers, 4), 12),
+            roles: {
+                vampir: config.roles?.vampir ?? DEFAULT_ROOM_CONFIG.roles.vampir,
+                doktor: config.roles?.doktor ?? DEFAULT_ROOM_CONFIG.roles.doktor,
+                gozcu: config.roles?.gozcu ?? DEFAULT_ROOM_CONFIG.roles.gozcu,
+                koylu: config.roles?.koylu ?? DEFAULT_ROOM_CONFIG.roles.koylu
+            },
+            timers: {
+                day: config.timers?.day || DEFAULT_ROOM_CONFIG.timers.day,
+                voting: config.timers?.voting || DEFAULT_ROOM_CONFIG.timers.voting
+            }
+        };
+
         const room = {
             code: roomCode,
             hostId: hostId,
+            config: roomConfig,
             players: new Map(),
             phase: PHASES.LOBBY,
             round: 0,
             votes: new Map(),
             nightActions: {
                 vampirTarget: null,
-                buyucuTarget: null
+                doktorTarget: null,
+                gozcuTarget: null,
+                vampirVotes: new Map()
             },
             chat: [],
             deadPlayers: new Set(),
@@ -63,8 +82,8 @@ class RoomManager {
             return { success: false, error: 'Oyun zaten başlamış!' };
         }
 
-        if (room.players.size >= 12) {
-            return { success: false, error: 'Oda dolu! (Maksimum 12 oyuncu)' };
+        if (room.players.size >= room.config.maxPlayers) {
+            return { success: false, error: `Oda dolu! (Maksimum ${room.config.maxPlayers} oyuncu)` };
         }
 
         // İsim kontrolü
@@ -133,19 +152,20 @@ class RoomManager {
             if (room.phase === PHASES.LOBBY) {
                 publicRooms.push({
                     code: room.code,
+                    roomName: room.config.roomName,
                     playerCount: room.players.size,
                     hostName: room.players.get(room.hostId)?.name || 'Bilinmiyor',
-                    maxPlayers: 12
+                    maxPlayers: room.config.maxPlayers
                 });
             }
         }
         return publicRooms;
     }
 
-    // Rol dağıtımı
+    // Rol dağıtımı (oda config'inden)
     assignRoles(roomCode) {
         const room = this.rooms.get(roomCode);
-        if (!room) return false;
+        if (!room) return { success: false, error: 'Oda bulunamadı!' };
 
         const playerCount = room.players.size;
 
@@ -154,16 +174,19 @@ class RoomManager {
             return { success: false, error: 'Minimum 4 oyuncu gerekli!' };
         }
 
-        // Rol dağılımını al (12'den fazla için 12 kullan)
-        const distribution = ROLE_DISTRIBUTION[Math.min(playerCount, 12)] || ROLE_DISTRIBUTION[12];
+        // Oda config'inden rol dağılımını al
+        const config = room.config.roles;
+
+        // Toplam rol sayısını kontrol et
+        const totalConfigRoles = config.vampir + config.doktor + config.gozcu + config.koylu;
 
         // Rolleri oluştur
         const roles = [];
-        for (let i = 0; i < distribution.vampir; i++) roles.push(ROLES.VAMPIR);
-        for (let i = 0; i < distribution.buyucu; i++) roles.push(ROLES.BUYUCU);
-        for (let i = 0; i < distribution.koylu; i++) roles.push(ROLES.KOYLU);
+        for (let i = 0; i < Math.min(config.vampir, playerCount); i++) roles.push(ROLES.VAMPIR);
+        for (let i = 0; i < Math.min(config.doktor, playerCount - roles.length); i++) roles.push(ROLES.DOKTOR);
+        for (let i = 0; i < Math.min(config.gozcu, playerCount - roles.length); i++) roles.push(ROLES.GOZCU);
 
-        // Eksik rolleri köylü olarak doldur
+        // Geri kalanı köylü
         while (roles.length < playerCount) {
             roles.push(ROLES.KOYLU);
         }

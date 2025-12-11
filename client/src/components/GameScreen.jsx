@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Chat from './Chat';
 
 // Rol bilgileri
 const ROLE_INFO = {
     vampir: { name: 'Vampir', emoji: '🧛', color: 'text-vampire-400', bgColor: 'from-vampire-700 to-vampire-900' },
     koylu: { name: 'Köylü', emoji: '👨‍🌾', color: 'text-emerald-400', bgColor: 'from-emerald-700 to-emerald-900' },
-    buyucu: { name: 'Büyücü', emoji: '🧙', color: 'text-purple-400', bgColor: 'from-purple-700 to-purple-900' }
+    doktor: { name: 'Doktor', emoji: '👨‍⚕️', color: 'text-cyan-400', bgColor: 'from-cyan-700 to-cyan-900' },
+    gozcu: { name: 'Gözcü', emoji: '🔮', color: 'text-purple-400', bgColor: 'from-purple-700 to-purple-900' }
 };
 
 // Faz bilgileri
@@ -24,10 +25,12 @@ function GameScreen({
     playerId,
     timer,
     messages,
+    unreadMessages = 0,
     onNightAction,
     onVote,
     onSendMessage,
-    onBackToLobby
+    onBackToLobby,
+    onToggleChat
 }) {
     const [selectedTarget, setSelectedTarget] = useState(null);
     const [hasActed, setHasActed] = useState(false);
@@ -40,7 +43,6 @@ function GameScreen({
     const players = gameState?.players || [];
     const myPlayer = players.find(p => p.id === playerId);
     const isAlive = myPlayer?.isAlive ?? true;
-    const alivePlayers = players.filter(p => p.isAlive);
 
     // Faz değiştiğinde seçimi sıfırla
     useEffect(() => {
@@ -48,11 +50,20 @@ function GameScreen({
         setHasActed(false);
     }, [gameState?.phase]);
 
+    // Chat toggle handler
+    const handleChatToggle = (isOpen) => {
+        setShowChat(isOpen);
+        onToggleChat?.(isOpen);
+    };
+
     // Gece aksiyonu gönder
     const handleNightAction = async () => {
         if (!selectedTarget || hasActed) return;
 
-        const actionType = myRole === 'vampir' ? 'vampir_kill' : 'buyucu_save';
+        let actionType = 'vampir_kill';
+        if (myRole === 'doktor') actionType = 'doktor_save';
+        else if (myRole === 'gozcu') actionType = 'gozcu_check';
+
         await onNightAction(selectedTarget, actionType);
         setHasActed(true);
     };
@@ -71,10 +82,11 @@ function GameScreen({
         if (player.id === playerId) return false;
         if (!player.isAlive) return false;
 
-        // Gece fazında sadece vampir ve büyücü seçebilir
+        // Gece fazında
         if (gameState?.phase === 'night') {
+            // Köylü seçemez
             if (myRole === 'koylu') return false;
-            // Vampir başka vampiri seçemez
+            // Vampir başka vampiri öldüremez
             if (myRole === 'vampir' && teammates.includes(player.name)) return false;
         }
 
@@ -199,7 +211,8 @@ function GameScreen({
                                 <p className="text-gray-300 max-w-xs mx-auto">
                                     {myRole === 'vampir' && 'Geceleri köylüleri avla. Diğer vampirleri görebilirsin.'}
                                     {myRole === 'koylu' && 'Vampirleri bul ve gündüz oylamasında elemeye çalış.'}
-                                    {myRole === 'buyucu' && 'Her gece bir kişiyi vampirlerden koruyabilirsin.'}
+                                    {myRole === 'doktor' && 'Her gece bir kişiyi vampirlerden koruyabilirsin.'}
+                                    {myRole === 'gozcu' && 'Her gece bir kişinin vampir olup olmadığını öğrenebilirsin.'}
                                 </p>
                                 {teammates.length > 0 && (
                                     <div className="mt-4 p-3 bg-black/30 rounded-lg">
@@ -225,7 +238,8 @@ function GameScreen({
                                 {gameState?.phase === 'night' && isAlive && (
                                     <div className="bg-indigo-900/50 text-indigo-300 py-3 px-4 rounded-lg">
                                         {myRole === 'vampir' && '🧛 Öldürmek istediğin köylüyü seç'}
-                                        {myRole === 'buyucu' && '🧙 Korumak istediğin kişiyi seç'}
+                                        {myRole === 'doktor' && '👨‍⚕️ Korumak istediğin kişiyi seç'}
+                                        {myRole === 'gozcu' && '🔮 Sorgulamak istediğin kişiyi seç'}
                                         {myRole === 'koylu' && '😴 Uyu ve sabahı bekle...'}
                                     </div>
                                 )}
@@ -291,7 +305,8 @@ function GameScreen({
                                             className="btn-primary px-8"
                                         >
                                             {hasActed ? '✅ Aksiyon Gönderildi' :
-                                                myRole === 'vampir' ? '🩸 Saldır' : '✨ Koru'}
+                                                myRole === 'vampir' ? '🩸 Saldır' :
+                                                    myRole === 'doktor' ? '💉 Koru' : '🔮 Sorgula'}
                                         </button>
                                     )}
 
@@ -311,14 +326,21 @@ function GameScreen({
                 </div>
             </main>
 
-            {/* Chat Toggle */}
+            {/* Chat Toggle with Badge */}
             <button
-                onClick={() => setShowChat(!showChat)}
+                onClick={() => handleChatToggle(!showChat)}
                 className="fixed bottom-4 right-4 w-14 h-14 bg-vampire-600 hover:bg-vampire-500 
                    rounded-full shadow-lg flex items-center justify-center text-2xl
-                   transition-transform hover:scale-110 z-40"
+                   transition-transform hover:scale-110 z-40 relative"
             >
                 💬
+                {/* Okunmamış mesaj rozeti */}
+                {unreadMessages > 0 && !showChat && (
+                    <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs 
+                          font-bold rounded-full flex items-center justify-center animate-pulse">
+                        {unreadMessages > 9 ? '9+' : unreadMessages}
+                    </span>
+                )}
             </button>
 
             {/* Chat Panel */}
@@ -330,7 +352,7 @@ function GameScreen({
                         isAlive={isAlive}
                         phase={gameState?.phase}
                         myRole={myRole}
-                        onClose={() => setShowChat(false)}
+                        onClose={() => handleChatToggle(false)}
                     />
                 </div>
             )}
